@@ -1,0 +1,13 @@
+node_modules/
+.next/
+dist/
+.turbo/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Local package cache and separately hosted prototype
+.pnpm-store/
+perk-site/

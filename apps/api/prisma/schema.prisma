@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Member {
+  id           String       @id @default(uuid()) @db.Uuid
+  name         String
+  email        String       @unique
+  passwordHash String
+  createdAt    DateTime     @default(now()) @db.Timestamptz(3)
+  redemptions  Redemption[]
+}
+
+model Reward {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String
+  description String
+  codes       RedemptionCode[]
+  redemptions Redemption[]
+}
+
+model RedemptionCode {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique
+  rewardId    String       @db.Uuid
+  maxUses     Int          @default(1)
+  usedCount   Int          @default(0)
+  expiresAt   DateTime?    @db.Timestamptz(3)
+  isActive    Boolean      @default(true)
+  reward      Reward       @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+  redemptions Redemption[]
+}
+
+model Redemption {
+  id             String         @id @default(uuid()) @db.Uuid
+  memberId       String         @db.Uuid
+  codeId         String         @db.Uuid
+  rewardId       String         @db.Uuid
+  idempotencyKey String         @db.Uuid
+  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
+  member         Member         @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  code           RedemptionCode @relation(fields: [codeId], references: [id], onDelete: Restrict)
+  reward         Reward         @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+
+  @@unique([memberId, codeId])
+  @@unique([memberId, idempotencyKey])
+  @@index([memberId, createdAt(sort: Desc), id(sort: Desc)])
+}
