@@ -1,6 +1,6 @@
 # Redemption app
 
-Backend-focused member rewards project. Steps 1 and 2 are implemented: the monorepo scaffold and database foundation. Authentication, redemption endpoints, Redis, and member pages are subsequent work. `perk-site/` is the earlier standalone Sites demo and is not part of the workspace apps.
+Backend-focused member rewards project. The monorepo, database foundation, and member frontend are implemented. The NestJS authentication/redemption endpoints and Redis mechanisms are subsequent work. The frontend includes an explicit browser demo and a separate API mode. `perk-site/` is the earlier standalone Sites demo and is not part of the workspace apps.
 
 ## Stack
 
@@ -84,3 +84,32 @@ The suite checks seed password hashes and code states, RLS configuration, denied
 The connected Supabase project already has unrelated tables in `public`. The app's local Supabase connection URLs therefore use `schema=redemption` on both DATABASE_URL and DIRECT_URL. Prisma creates and manages its tables and migration history in that dedicated schema, leaving existing public tables intact. Keep this parameter in deployment URLs too. No public tables are baselined, reset, or adopted by this app. New empty local databases can continue to use `schema=public`.
 
 If you encounter P3005, inspect the target schema before proceeding. Do not mark the app's initial migration as applied unless its tables and constraints actually exist. The database tests documented above target the disposable local public schema, not the shared Supabase database.
+
+## Member frontend
+
+Run `pnpm --filter @redemption/web dev` and open http://localhost:3000. `/` redirects to `/redeem`; members without a browser session are sent to `/login`. The frontend supports responsive login, redemption, success confirmation, paginated history, reward detail dialogs, demo code help, sign-out, and recoverable error states.
+
+**Explore demo** is the default login tab. Use `alex@perk.demo` / `perk1234` or choose another demo member. The demo password is intentionally public and separate from the seeded database password. Demo rewards are stored only in localStorage; the member session is stored in sessionStorage. Demo mode never calls the API or Supabase. Browser locking reduces overlapping demo writes where available, but the demo is not a production security or concurrency implementation. The guide can reset all demo records in this browser after an explicit reset confirmation.
+
+**Member sign in** sends requests through the existing `/api/*` Next.js proxy to API_URL. These endpoints still need to be implemented in NestJS. The typed hand-written client expects:
+
+| Endpoint | Request / response |
+| --- | --- |
+| POST /api/auth/login | `{ email, password }` → `{ member: { id, name, email } }`, with httpOnly JWT cookie |
+| POST /api/auth/logout | Clear cookie; return 204 or JSON |
+| POST /api/redemptions | `{ code }` + Idempotency-Key → shared RedemptionDto |
+| GET /api/redemptions/me?limit=6&cursor=... | shared RedemptionHistoryResponse (`items`, `nextCursor`) |
+
+Errors use `{ code, message }`. Cookies are included in every request; JWTs are never read or stored by frontend JavaScript. SessionStorage caches member display information only. Client route redirection is a usability feature, not authorization: the API must authenticate and scope every request. A 401 clears the browser session. Login does not yet use a server-side session restoration endpoint because the backend is not implemented.
+
+TanStack Query handles mutations and cursor history. Requests time out after 15 seconds. A new UUID is created for each new redemption attempt and retained for explicit retries after network/server/in-progress errors; there are no automatic redemption retries. Changing the code starts another attempt. The current attempt key is held in component memory and does not survive a page reload. History queries are isolated by mode and member; sign-out clears query caches.
+
+Frontend verification:
+
+```sh
+pnpm --filter @redemption/web test
+pnpm --filter @redemption/web typecheck
+pnpm --filter @redemption/web build
+```
+
+Tests cover demo login, member isolation, idempotent replay, duplicate and exhausted codes, expired/inactive/missing codes, rate limiting, cursor history, cookie/idempotency headers, session-expiry events, and network failure classification.
